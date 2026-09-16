@@ -1,0 +1,34 @@
+# Copy to terraform.tfvars and fill in with your own values.
+# Every value below is a placeholder -- no real subscription/tenant/object IDs.
+
+name_prefix = "acme"
+environment = "dev"
+location    = "eastus"
+
+address_space = ["10.1.0.0/16"]
+
+subnets = {
+  app = { address_prefixes = ["10.1.1.0/24"] }
+  db  = { address_prefixes = ["10.1.2.0/24"] }
+}
+
+# Replace with real Azure AD object IDs (e.g. `az ad signed-in-user show --query id`).
+rbac_admin_object_ids = [
+  "00000000-0000-0000-0000-000000000000"
+]
+
+role_assignments = [
+  {
+    principal_id         = "00000000-0000-0000-0000-000000000000"
+    role_definition_name = "Reader"
+  }
+]
+
+required_tag_keys = ["environment", "owner", "project"]
+
+# Start in Audit mode while onboarding a client's existing resources, then move to Deny.
+policy_effect = "Audit"
+
+tags = {
+  owner = "platform-team"
+}
