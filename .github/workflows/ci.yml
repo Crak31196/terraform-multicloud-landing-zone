@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  TF_VERSION: "1.9.8"
+  # Directories containing standalone Terraform configuration (modules + examples).
+  TF_DIRS: >-
+    modules/aws/vpc
+    modules/aws/iam-baseline
+    modules/aws/kms
+    modules/aws/budget-guardrail
+    modules/azure/vnet
+    modules/azure/rbac-baseline
+    modules/azure/keyvault
+    modules/azure/waf
+    examples/aws-landing-zone
+    examples/azure-landing-zone
+  # Directories containing *.tftest.hcl files, all using mock_provider so no cloud
+  # credentials are ever required.
+  TF_TEST_DIRS: >-
+    modules/aws/vpc
+    modules/aws/kms
+    modules/azure/vnet
+    modules/azure/keyvault
+    examples/aws-landing-zone
+    examples/azure-landing-zone
+
+jobs:
+  fmt-validate-test:
+    name: Terraform fmt / validate / test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: terraform fmt -check (whole repo)
+        run: terraform fmt -check -recursive -diff
+
+      - name: terraform init + validate (every module and example)
+        run: |
+          set -euo pipefail
+          for dir in $TF_DIRS; do
+            echo "::group::validate $dir"
+            (cd "$dir" && terraform init -backend=false -input=false && terraform validate)
+            echo "::endgroup::"
+          done
+
+      - name: terraform test (mocked providers, no cloud credentials)
+        run: |
+          set -euo pipefail
+          for dir in $TF_TEST_DIRS; do
+            echo "::group::test $dir"
+            (cd "$dir" && terraform test)
+            echo "::endgroup::"
+          done
+
+  security-scan:
+    name: Security scan (checkov, best-effort)
+    runs-on: ubuntu-latest
+    # This job never blocks the pipeline: if checkov can't be installed (e.g. PyPI is
+    # unreachable from the runner, or the install times out), the step is skipped and
+    # noted in the job summary instead of failing CI.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install checkov (best-effort, never blocks CI)
+        id: install
+        continue-on-error: true
+        timeout-minutes: 5
+        run: pip install checkov
+
+      - name: Run checkov against every module (best-effort, never blocks CI)
+        if: steps.install.outcome == 'success'
+        continue-on-error: true
+        run: checkov --directory modules --framework terraform --compact --quiet
+
+      - name: Note skipped scan
+        if: steps.install.outcome != 'success'
+        run: |
+          echo "### Security scan skipped" >> "$GITHUB_STEP_SUMMARY"
+          echo "checkov could not be installed (network/timeout) -- this does not fail the build." >> "$GITHUB_STEP_SUMMARY"
