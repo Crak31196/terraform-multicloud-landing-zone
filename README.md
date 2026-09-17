@@ -172,7 +172,7 @@ repo's CI pipeline never runs `apply` and never touches a real cloud account --
 that run automatically. Applying to a real environment is a deliberate, manual step
 you take with your own credentials.
 
-## What I'd build next for a client
+## What I'd build next
 
 - **Multi-account AWS Organizations** with a dedicated log-archive/security account
   and SCPs, instead of a single-account baseline.
